@@ -1,0 +1,181 @@
+#include <assert.h> 
+#include "aes_test.h"
+
+
+void KeyExpansionTest128bit()
+{
+#ifndef AES128
+	#define AES128
+#endif
+
+	uint8_t cipher_key_128[16] = {
+		0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
+	};
+	WORD key_expansion_128[4];
+
+	uint8_t i;
+	WORD* result;
+
+	key_expansion_128[0].val[0] = 0x2b;
+	key_expansion_128[0].val[1] = 0x7e;
+	key_expansion_128[0].val[2] = 0x15;
+	key_expansion_128[0].val[3] = 0x16;
+
+	key_expansion_128[1].val[0] = 0x28;
+	key_expansion_128[1].val[1] = 0xae;
+	key_expansion_128[1].val[2] = 0xd2;
+	key_expansion_128[1].val[3] = 0xa6;
+
+	key_expansion_128[2].val[0] = 0xab;
+	key_expansion_128[2].val[1] = 0xf7;
+	key_expansion_128[2].val[2] = 0x15;
+	key_expansion_128[2].val[3] = 0x88;
+
+	key_expansion_128[3].val[0] = 0x09;
+	key_expansion_128[3].val[1] = 0xcf;
+	key_expansion_128[3].val[2] = 0x4f;
+	key_expansion_128[3].val[3] = 0x3c;
+
+
+	KeyExpansion(cipher_key_128, &result);
+
+	for (i = 0; i < Nb; i++)
+	{
+		assert(key_expansion_128[i].val[0] == result[i].val[0]);
+		assert(key_expansion_128[i].val[1] == result[i].val[1]);
+		assert(key_expansion_128[i].val[2] == result[i].val[2]);
+		assert(key_expansion_128[i].val[3] == result[i].val[3]);
+	}
+
+	free(result);
+
+#ifdef AES128
+	#undef AES128
+#endif
+}
+
+void CipherTest128bitApendixB()
+{
+#ifndef AES128
+#define AES128
+#endif
+	uint8_t input[16] = {
+		0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34
+	};
+
+	uint8_t cipher_key_128[16] = {
+		0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
+	};
+
+	uint8_t* result;
+	KeyExpansion(cipher_key_128, NULL);
+	Cipher(input, &result);
+
+	uint8_t output[16] = {
+		0x39, 0x25, 0x84, 0x1d, 0x02, 0xdc, 0x09, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0x0b, 0x32
+	};
+	
+	uint8_t i;
+	for (i = 0; i < 16; i++)
+	{
+		assert(output[i] == result[i]);
+	}
+
+	free(result);
+#ifdef AES128
+#undef AES128
+#endif
+}
+
+void DecipherTest128bit()
+{
+#ifndef AES128
+#define AES128
+#endif
+	uint8_t output[16] = {
+		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+	};
+
+	uint8_t cipher_key_128[16] = {
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+	};
+
+	uint8_t input[16] = {
+		0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a
+	};
+
+	uint8_t* result;
+	KeyExpansion(cipher_key_128, NULL);
+	InvCipher(input, &result);
+
+	uint8_t i;
+	for (i = 0; i < 16; i++)
+	{
+		assert(output[i] == result[i]);
+	}
+
+	free(result);
+#ifdef AES128
+#undef AES128
+#endif
+}
+
+void CipherTest128bit()
+{
+#ifndef AES128
+#define AES128
+#endif
+	uint8_t input[16] = {
+		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+	};
+
+	uint8_t cipher_key_128[16] = {
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+	};
+
+	uint8_t output[16] = {
+		0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a
+	};
+
+	uint8_t* result;
+	KeyExpansion(cipher_key_128, NULL);
+	Cipher(input, &result);
+
+	uint8_t i;
+	for (i = 0; i < 16; i++)
+	{
+		assert(output[i] == result[i]);
+	}
+
+	free(result);
+#ifdef AES128
+#undef AES128
+#endif
+}
+
+void MultiplyTest()
+{
+	assert(xtime(0x57) == 0xae);
+	assert(xtime(0xae) == 0x47);
+	assert(xtime(0x47) == 0x8e);
+	assert(xtime(0x8e) == 0x07);
+
+
+	assert(multiply(0x13, 0x57) == 0xfe);
+	assert(multiply(0x13, 0x57) == multiply(0x57, 0x13));
+	assert(multiply(0x08, 0x57) == 0x8e);
+	assert(multiply(0x4f, 0x02) == xtime(0x4f));
+}
+
+int main(int argc, char** argv)
+{
+	KeyExpansionTest128bit();
+	
+	CipherTest128bitApendixB();
+
+	MultiplyTest();
+
+	CipherTest128bit();
+
+	DecipherTest128bit();
+}

@@ -1,9 +1,28 @@
 #include "aes.h"
+#include "aes_test.h"
 
+#include <stdio.h>
+
+//#define Nb 4
+
+// values for AES 256 bit
+#if defined(AES256)
+	#define Nk 8
+	#define Nr 14
+
+// values for AES 192 bit
+#elif defined(AES192)
+	#define Nk 6
+	#define Nr 12
+
+// values for AES 128 bit (default)
+#else
+	#define Nk 4
+	#define Nr 10
+#endif
 
 static uint8_t state[4][4];
 static WORD* roundKey;
-
 
 const uint8_t Rcon[11] = {
 	0xff, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
@@ -63,8 +82,8 @@ inline uint8_t getInvSBoxValue(const uint8_t value)
 
 inline void SubWord(WORD* w)
 {
-
-	for (uint8_t j = 0; j < Nb; j++)
+	uint8_t j;
+	for (j = 0; j < Nb; j++)
 	{
 		w->val[j] = getSBoxValue(w->val[j]);	
 	} 
@@ -73,20 +92,31 @@ inline void SubWord(WORD* w)
 
 inline void RotWord(WORD* w)
 {
+	uint8_t j;
 	uint8_t temp = w->val[0];
-	for (uint8_t j = 0; j < Nb - 1; j++)
+	for (j = 0; j < Nb - 1; j++)
 	{
 		w->val[j] = w->val[j + 1];
 	}
 	w->val[Nb - 1] = temp;
 }
 
+// multiply the polynomial val by x (i.e. 2 -> left shift)
+// if the first bit is 1 the resulting polynomial will
+// be of degree 8 and we reduce it by taking the multplication
+// modulo m(x) = x^8 + x^4 + x^3 + x + 1
+// which translates into XORing val by 0x1b
+inline uint8_t xtime(uint8_t val)
+{
+	return (val << 1) ^ (((val >> 7) & 1) * 0x1b);
+}
 
 inline uint8_t multiply(uint8_t a, uint8_t b)
 {
 	uint8_t result = 0;
 
 	// put the smaller value into b
+	// (small optimization)
 	if (b > a)
 	{
 		b ^= a;
@@ -96,13 +126,13 @@ inline uint8_t multiply(uint8_t a, uint8_t b)
 
 	uint8_t next = a;
 
-	while (a > 0)
+	while (b > 0)
 	{
-		if (a & 1)
+		if (b & 1)
 		{
 			result ^= next;
 		}
-		a <<= 1;
+		b >>= 1;
 		next = xtime(next);
 	} 
 
@@ -111,7 +141,7 @@ inline uint8_t multiply(uint8_t a, uint8_t b)
 
 
 // key must have at least Nk * 4 bytes
-void KeyExpansion(const uint8_t* key)
+void KeyExpansion(const uint8_t* key, WORD** w)
 {
 	// this will be freed at the end of the encryption proess
 	// TODO: add function name which frees this
@@ -127,23 +157,18 @@ void KeyExpansion(const uint8_t* key)
 	WORD temp;
 
 	uint8_t i;
-
+	uint8_t j;
 	for (i = 0; i < Nk; i++) 
 	{
 
-		for (uint8_t j = 0; j < Nb; j++)
+		for (j = 0; j < Nb; j++)
 		{
 			roundKey[i].val[j] = key[4*i + j];	
 		}
-		// w[i].val[0] = key[4*i];
-		// w[i].val[1] = key[4*i + 1];
-		// w[i].val[2] = key[4*i + 2];
-		// w[i].val[3] = key[4*i + 3];
 	}
 
 	for (i = Nk; i < Nb*(Nr + 1); i++)
 	{
-
 		temp = roundKey[i - 1];
 		
 		if (i % Nk == 0)
@@ -161,116 +186,164 @@ void KeyExpansion(const uint8_t* key)
 		roundKey[i].val[1] = roundKey[i - Nk].val[1] ^ temp.val[1];
 		roundKey[i].val[2] = roundKey[i - Nk].val[2] ^ temp.val[2];
 		roundKey[i].val[3] = roundKey[i - Nk].val[3] ^ temp.val[3];
-
-		// for (uint8_t j = 0; j < Nb; j++)
-		// {
-		// 	temp[j] = w[i - 1].val[j];
-		// }
-
-		// temp[0] = w[i - 1].val[0];
-		// temp[1] = w[i - 1].val[1];
-		// temp[2] = w[i - 1].val[2];
-		// temp[3] = w[i - 1].val[3];
 	}
-
+	if (w != NULL)
+	{
+		*w = roundKey;
+	}
 }
 
 
-inline uint8_t xtime(uint8_t val) 
+void AddRoundKey(const uint8_t round)
 {
-	return (val << 1) ^ 0x1b;
+	uint8_t i;
+	uint8_t j;
+	for (j = 0; j < Nb; j++)
+	{
+		for (i = 0; i < Nb; i++)
+		{
+			state[i][j] ^= roundKey[Nb * round + j].val[i];
+		}
+	}
 }
+
 
 void SubBytes()
 {
-	for (uint8_t i = 0; i < Nb; i++) 
+	uint8_t i;
+	uint8_t j;
+	for (i = 0; i < Nb; i++) 
 	{
-		for (uint8_t j = 0; j < Nb; j++) 
+		for (j = 0; j < Nb; j++) 
 		{
 			state[i][j] = getSBoxValue(state[i][j]);
 		}
 	}
 }
 
+void InvSubBytes()
+{
+	uint8_t i;
+	uint8_t j;
+	for (i = 0; i < Nb; i++)
+	{
+		for (j = 0; j < Nb; j++)
+		{
+			state[i][j] = getInvSBoxValue(state[i][j]);
+		}
+	}
+}
+
+
 void ShiftRows() 
 {
-	for (uint8_t i = 1; i < Nb; i++)
+	uint8_t i;
+	uint8_t j;
+	for (i = 1; i < Nb; i++)
 	{
 		uint8_t temp[4];
-		for (uint8_t j = 0; j < Nb; j++) 
+		for (j = 0; j < Nb; j++) 
 		{
-			temp[j] = state[i][i];
+			temp[j] = state[i][j];
 		}
-		for (uint8_t j = 0; j < Nb; j++) 
+		for (j = 0; j < Nb; j++) 
 		{
 			state[i][j] = temp[(j + i) % Nb];
 		}
 	}
 }
 
-void MixColumns()
-{
-	for (uint8_t j = 0; j < Nb; j++)
-	{
-		state[0][j] = multiply(state[0][j], 0x02) ^ multiply(state[1][j], 0x03) ^ state[2][j] ^ state[3][j];
-		state[1][j] = state[0][j] ^ multiply(state[1][j], 0x02) ^ multiply(state[2][j], 0x03) ^ state[3][j];
-		state[2][j] = state[0][j] ^ state[1][j] ^ multiply(state[2][j], 0x02) ^ multiply(state[3][j], 0x03);
-		state[3][j] = multiply(state[0][j], 0x03) ^ state[1][j] ^ state[2][j] ^ multiply(state[3][j], 0x02);
-	}
-}
-
-void AddRoundKey(const uint8_t round)
-{
-	for (uint8_t j = 0; j < Nb; j++)
-	{
-		for (uint8_t i = 0; i < Nb; i++)
-		{
-			state[i][j] ^= roundKey[round].val[i];
-		}
-	}
-}
-
 void InvShiftRows()
 {
-	for (uint8_t i = 1; i < Nb; i++)
+	uint8_t i;
+	uint8_t j;
+	for (i = 1; i < Nb; i++)
 	{
 		uint8_t temp[4];
-		for (uint8_t j = 0; j < Nb; j++) 
+		for (j = 0; j < Nb; j++)
 		{
-			temp[j] = state[i][i];
+			temp[j] = state[i][j];
 		}
-		for (uint8_t j = 0; j < Nb; j++) 
+		for (j = 0; j < Nb; j++)
 		{
 			state[i][j] = temp[(j - i + Nb) % Nb];
 		}
 	}
 }
 
-void InvSubByte()
+
+void MixColumns()
 {
-	for (uint8_t i = 0; i < Nb; i++) 
+	uint8_t i;
+	uint8_t j;
+	uint8_t temp[Nb];
+	for (j = 0; j < Nb; j++)
 	{
-		for (uint8_t j = 0; j < Nb; j++) 
+		temp[0] = multiply(state[0][j], 0x02) ^ multiply(state[1][j], 0x03) ^ state[2][j] ^ state[3][j];
+		temp[1] = state[0][j] ^ multiply(state[1][j], 0x02) ^ multiply(state[2][j], 0x03) ^ state[3][j];
+		temp[2] = state[0][j] ^ state[1][j] ^ multiply(state[2][j], 0x02) ^ multiply(state[3][j], 0x03);
+		temp[3] = multiply(state[0][j], 0x03) ^ state[1][j] ^ state[2][j] ^ multiply(state[3][j], 0x02);
+	
+		for (i = 0; i < Nb; i++)
 		{
-			state[i][j] = getInvSBoxValue(state[i][j]);
+			state[i][j] = temp[i];
 		}
-	}	
+	}
 }
 
 void InvMixColumns()
 {
-	for (uint8_t j = 0; j < Nb; j++)
+	uint8_t i;
+	uint8_t j;
+	uint8_t temp[Nb];
+	for (j = 0; j < Nb; j++)
 	{
-		state[0][j] = multiply(state[0][j], 0x0e) ^ multiply(state[1][j], 0x0b) ^ multiply(state[2][j], 0x0d) ^ multiply(state[3][j], 0x09);
-		state[1][j] = multiply(state[0][j], 0x09) ^ multiply(state[1][j], 0x0e) ^ multiply(state[2][j], 0x0b) ^ multiply(state[3][j], 0x0d);
-		state[2][j] = multiply(state[0][j], 0x0d) ^ multiply(state[1][j], 0x09) ^ multiply(state[2][j], 0x0e) ^ multiply(state[3][j], 0x0b);
-		state[3][j] = multiply(state[0][j], 0x0b) ^ multiply(state[1][j], 0x0d) ^ multiply(state[2][j], 0x09) ^ multiply(state[3][j], 0x0e);
+		temp[0] = multiply(state[0][j], 0x0e) ^ multiply(state[1][j], 0x0b) ^ multiply(state[2][j], 0x0d) ^ multiply(state[3][j], 0x09);
+		temp[1] = multiply(state[0][j], 0x09) ^ multiply(state[1][j], 0x0e) ^ multiply(state[2][j], 0x0b) ^ multiply(state[3][j], 0x0d);
+		temp[2] = multiply(state[0][j], 0x0d) ^ multiply(state[1][j], 0x09) ^ multiply(state[2][j], 0x0e) ^ multiply(state[3][j], 0x0b);
+		temp[3] = multiply(state[0][j], 0x0b) ^ multiply(state[1][j], 0x0d) ^ multiply(state[2][j], 0x09) ^ multiply(state[3][j], 0x0e);
+
+		for (i = 0; i < Nb; i++)
+		{
+			state[i][j] = temp[i];
+		}
 	}
 }
+
+
+// sets the state to the given input
+inline void setState(const uint8_t* in)
+{
+	uint8_t i;
+
+	for (i = 0; i < 4 * Nb; i++)
+	{
+		state[i % Nb][i / Nb] = in[i];
+	}
+}
+
+//sets the result from the end state
+inline void getState(uint8_t* out)
+{
+	uint8_t i;
+	uint8_t j;
+
+	for (i = 0; i < Nb; i++)
+	{
+		for (j = 0; j < Nb; j++)
+		{
+			out[Nb * i + j] = state[j][i];
+		}
+	}
+}
+
 
 // assumes the input size is already 4 * Nb
 void Cipher(const uint8_t* in, uint8_t** out)
 {
+
+	uint8_t round;
+
 	// will be freed after the whole string is encrypted
 	// TODO: add function which frees this
 	uint8_t* result = (uint8_t *)malloc(4 * Nb * sizeof(uint8_t));
@@ -281,18 +354,13 @@ void Cipher(const uint8_t* in, uint8_t** out)
 		return;
 	}
 
-	// sets the state to the given input
-	for (uint8_t i = 0; i < 4 * Nb; i++)
-	{
-		state[i / Nb][i % Nb] = in[i];
-	}
-
+	setState(in);
+	
 	//add the first round key
 	AddRoundKey(0);
 
-
 	// the fist Nr - 1 rounds
-	for (uint8_t round = 1; round < Nr; ++round)
+	for (round = 1; round < Nr; ++round)
 	{
 		SubBytes();
 		ShiftRows();
@@ -305,16 +373,8 @@ void Cipher(const uint8_t* in, uint8_t** out)
 	ShiftRows();
 	AddRoundKey(Nr);
 
-	//sets the result from the end state
-	for (uint8_t i = 0; i < Nb; i++)
-	{
-		for (uint8_t j = 0; j < Nb; j++)
-		{
-			result[Nb * i + j] = state[i][j];
-		}
-	}
+	getState(result);
 	*out = result;
-
 }
 
 
@@ -323,6 +383,8 @@ void Cipher(const uint8_t* in, uint8_t** out)
 // also assumes the input is of size 4 * Nb
 void InvCipher(const uint8_t* in, uint8_t** out)
 {
+
+	uint8_t round;
 	// will be freed after the whole ciphertext is decrypted
 	// TODO: add function which frees this
 	uint8_t* result = (uint8_t *)malloc(4 * Nb * sizeof(uint8_t));
@@ -333,16 +395,12 @@ void InvCipher(const uint8_t* in, uint8_t** out)
 		return;
 	}
 
-	// sets the state to the given input
-	for (uint8_t i = 0; i < 4 * Nb; i++)
-	{
-		state[i / Nb][i % Nb] = in[i];
-	}
+	setState(in);
 
 	//add the last round key
 	AddRoundKey(Nr);
 
-	for (uint8_t round = Nr - 1; round; --round)
+	for (round = Nr - 1; round; round--)
 	{
 		InvShiftRows();
 		InvSubBytes();
@@ -354,13 +412,6 @@ void InvCipher(const uint8_t* in, uint8_t** out)
 	InvSubBytes();
 	AddRoundKey(0);
 
-	//sets the result from the end state
-	for (uint8_t i = 0; i < Nb; i++)
-	{
-		for (uint8_t j = 0; j < Nb; j++)
-		{
-			result[Nb * i + j] = state[i][j];
-		}
-	}
+	getState(result);
 	*out = result;
 }
