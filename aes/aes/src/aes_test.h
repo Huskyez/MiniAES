@@ -18,7 +18,7 @@ void ShiftRows();
 
 void MixColumns();
 
-void AddRoundKey(const uint8_t round);
+void AddRoundKey(const uint8_t round, const WORD* round_key);
 
 void InvShiftRows();
 
@@ -26,8 +26,8 @@ void InvSubBytes();
 
 void InvMixColumns();
 
-void Cipher(const uint8_t* in, uint8_t** out);
+void Cipher(const uint8_t* in, const WORD* round_key, uint8_t** out);
 
-void InvCipher(const uint8_t* in, uint8_t** out);
+void InvCipher(const uint8_t* in, const WORD* round_key, uint8_t** out);
 
 

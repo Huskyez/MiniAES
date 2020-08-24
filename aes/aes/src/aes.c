@@ -5,24 +5,32 @@
 
 //#define Nb 4
 
-// values for AES 256 bit
-#if defined(AES256)
-	#define Nk 8
-	#define Nr 14
+// // values for AES 256 bit
+// #if defined(AES256)
+// 	#define Nk 8
+// 	#define Nr 14
 
-// values for AES 192 bit
-#elif defined(AES192)
-	#define Nk 6
-	#define Nr 12
+// // values for AES 192 bit
+// #elif defined(AES192)
+// 	#define Nk 6
+// 	#define Nr 12
 
-// values for AES 128 bit (default)
-#else
-	#define Nk 4
-	#define Nr 10
-#endif
+// // values for AES 128 bit (default)
+// #else
+// 	#define Nk 4
+// 	#define Nr 10
+// #endif
+
+static AESTYPE aestype = AES128;
+
+static uint8_t Nk = 4;
+static uint8_t Nr = 10;
 
 static uint8_t state[4][4];
-static WORD* roundKey;
+// static WORD* round_key;
+
+static uint32_t error;
+
 
 const uint8_t Rcon[11] = {
 	0xff, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
@@ -68,6 +76,11 @@ const uint8_t inv_s_box[256] = {
 /*e*/ 0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61,
 /*f*/ 0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
 };
+
+
+
+
+// ----------------------------------------------------- PRIVATE FUNCTIONS -----------------------------------------------------------------------------
 
 
 inline uint8_t getSBoxValue(const uint8_t value)
@@ -143,11 +156,17 @@ inline uint8_t multiply(uint8_t a, uint8_t b)
 // key must have at least Nk * 4 bytes
 void KeyExpansion(const uint8_t* key, WORD** w)
 {
+	if (w == NULL)
+	{
+		// TODO: handle error
+		return;
+	}
+
 	// this will be freed at the end of the encryption proess
 	// TODO: add function name which frees this
-	roundKey = (WORD *)malloc(Nb * (Nr + 1) * sizeof(WORD));
+	WORD* round_key = (WORD *)malloc(Nb * (Nr + 1) * sizeof(WORD));
 
-	if (roundKey == NULL)
+	if (round_key == NULL)
 	{
 		//TODO: handle no memory
 		return;
@@ -163,13 +182,13 @@ void KeyExpansion(const uint8_t* key, WORD** w)
 
 		for (j = 0; j < Nb; j++)
 		{
-			roundKey[i].val[j] = key[4*i + j];	
+			round_key[i].val[j] = key[4 * i + j];	
 		}
 	}
 
-	for (i = Nk; i < Nb*(Nr + 1); i++)
+	for (i = Nk; i < Nb * (Nr + 1); i++)
 	{
-		temp = roundKey[i - 1];
+		temp = round_key[i - 1];
 		
 		if (i % Nk == 0)
 		{
@@ -182,19 +201,18 @@ void KeyExpansion(const uint8_t* key, WORD** w)
 			SubWord(&temp);
 		}
 
-		roundKey[i].val[0] = roundKey[i - Nk].val[0] ^ temp.val[0];
-		roundKey[i].val[1] = roundKey[i - Nk].val[1] ^ temp.val[1];
-		roundKey[i].val[2] = roundKey[i - Nk].val[2] ^ temp.val[2];
-		roundKey[i].val[3] = roundKey[i - Nk].val[3] ^ temp.val[3];
+		for (j = 0; j < Nb; j++)
+		{
+			round_key[i].val[j] = round_key[i - Nk].val[j] ^ temp.val[j];
+		}
 	}
-	if (w != NULL)
-	{
-		*w = roundKey;
-	}
+
+	*w = round_key;
+
 }
 
 
-void AddRoundKey(const uint8_t round)
+void AddRoundKey(const uint8_t round, const WORD* round_key)
 {
 	uint8_t i;
 	uint8_t j;
@@ -202,7 +220,7 @@ void AddRoundKey(const uint8_t round)
 	{
 		for (i = 0; i < Nb; i++)
 		{
-			state[i][j] ^= roundKey[Nb * round + j].val[i];
+			state[i][j] ^= round_key[Nb * round + j].val[i];
 		}
 	}
 }
@@ -339,9 +357,8 @@ inline void getState(uint8_t* out)
 
 
 // assumes the input size is already 4 * Nb
-void Cipher(const uint8_t* in, uint8_t** out)
+void Cipher(const uint8_t* in, const WORD* round_key, uint8_t** out)
 {
-
 	uint8_t round;
 
 	// will be freed after the whole string is encrypted
@@ -357,7 +374,7 @@ void Cipher(const uint8_t* in, uint8_t** out)
 	setState(in);
 	
 	//add the first round key
-	AddRoundKey(0);
+	AddRoundKey(0, round_key);
 
 	// the fist Nr - 1 rounds
 	for (round = 1; round < Nr; ++round)
@@ -365,13 +382,13 @@ void Cipher(const uint8_t* in, uint8_t** out)
 		SubBytes();
 		ShiftRows();
 		MixColumns();
-		AddRoundKey(round);
+		AddRoundKey(round, round_key);
 	}
 	
 	//last round
 	SubBytes();
 	ShiftRows();
-	AddRoundKey(Nr);
+	AddRoundKey(Nr, round_key);
 
 	getState(result);
 	*out = result;
@@ -381,7 +398,7 @@ void Cipher(const uint8_t* in, uint8_t** out)
 // reverses the Cipher method
 // -> the procedure is done in reverse
 // also assumes the input is of size 4 * Nb
-void InvCipher(const uint8_t* in, uint8_t** out)
+void InvCipher(const uint8_t* in, const WORD* round_key, uint8_t** out)
 {
 
 	uint8_t round;
@@ -398,20 +415,182 @@ void InvCipher(const uint8_t* in, uint8_t** out)
 	setState(in);
 
 	//add the last round key
-	AddRoundKey(Nr);
+	AddRoundKey(Nr, round_key);
 
 	for (round = Nr - 1; round; round--)
 	{
 		InvShiftRows();
 		InvSubBytes();
-		AddRoundKey(round);
+		AddRoundKey(round, round_key);
 		InvMixColumns();
 	}
 	
 	InvShiftRows();
 	InvSubBytes();
-	AddRoundKey(0);
+	AddRoundKey(0, round_key);
 
 	getState(result);
 	*out = result;
+}
+
+
+
+// ----------------------------------------------------- PUBLIC API FUNCTIONS --------------------------------------------------------------------------
+
+void setAESType(AESTYPE type)
+{
+	aestype = type;
+	switch (aestype)
+	{
+		case AES192:
+			Nk = 6;
+			Nr = 12;
+			break;
+		case AES256:
+			Nk = 8;
+			Nr = 14;
+			break;
+		default:
+			Nk = 4;
+			Nr = 10;
+			break;
+	}
+}
+
+AESTYPE getAESType()
+{
+	return aestype;
+}
+
+
+int ecb_aes_encrypt(const uint8_t* plaintext, size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size)
+{
+
+	if (ciphertext_size == NULL || ciphertext == NULL)
+	{
+		// TODO: handle error
+		return -1;
+	}
+
+	uint8_t i;
+	// number of blocks in the plaintext
+	size_t blocks = plaintext_size / (Nb * 4);
+
+	//remaining number of bytes in the last block
+	size_t rest = plaintext_size % (Nb * 4);
+
+
+	// if rest is 0, i.e. length of plaintext is a multiple of Nb * 4
+	// we still add padding so we don't have to verify later if padding was
+	// added or not
+	size_t padding_size = Nb * 4 - rest;
+
+	//add padding
+	uint8_t* padded_plaintext = (uint8_t *) malloc((padding_size + plaintext_size) * sizeof(uint8_t));
+	if (padded_plaintext == NULL)
+	{
+		// TODO: handle error
+		return -1;
+	}
+
+	memcpy(padded_plaintext, plaintext, plaintext_size);
+
+	padded_plaintext[plaintext_size] = 0x80;
+	for (i = plaintext_size + 1; i < plaintext_size + padding_size; i++)
+	{
+		padded_plaintext[i] = 0x00;		
+	}
+
+	*ciphertext_size = plaintext_size + padding_size;
+
+	uint8_t* cipher = (uint8_t *)malloc(*ciphertext_size * sizeof(uint8_t));
+	if (cipher == NULL) 
+	{
+		// TODO: handle error
+		return -1;
+	}
+
+	WORD *round_key;
+	KeyExpansion(key, &round_key);
+
+	uint8_t* current_cipher_block;
+
+	for (i = 0; i < blocks + 1; i++)
+	{
+		Cipher(padded_plaintext + (i * Nb * 4), round_key, &current_cipher_block);
+		memcpy(cipher + (i * Nb * 4), current_cipher_block, Nb * 4);
+		free(current_cipher_block);
+	}
+
+	*ciphertext = cipher;
+	
+	free(round_key);
+
+	return 0;
+}
+
+
+int ecb_aes_decrypt(const uint8_t* ciphertext, size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size)
+{
+
+	if (plaintext == NULL || plaintext_size == NULL)
+	{
+		// TODO: handle error
+		return -1;
+	}
+
+	uint8_t i;
+
+	size_t blocks = ciphertext_size / (Nb * 4);
+
+	if (ciphertext_size % (Nb * 4) != 0)
+	{
+		// TODO: handle error
+		return -1;
+	}
+
+	uint8_t *result = (uint8_t *)malloc(ciphertext_size * sizeof(uint8_t));
+	if (result == NULL)
+	{
+		// TODO: handle error
+		return -1;
+	}	
+
+
+	WORD *round_key;
+	KeyExpansion(key, &round_key);
+
+	// decipher ciphertext block by block
+	uint8_t* plaintext_block;
+
+	for (i = 0; i < blocks; i++)
+	{
+		InvCipher(ciphertext + (i * Nb * 4), round_key, &plaintext_block, Nb * 4);
+		memcpy(result + (i * Nb * 4), plaintext_block, Nb * 4);
+		free(plaintext_block);
+	}
+
+
+	size_t size = ciphertext_size;
+
+	// remove pading
+	for (i = ciphertext_size - 1; i; i--)
+	{
+		if (result[i] == 0x00)
+		{
+			size--;
+		}
+		if (result[i] == 0x80)
+		{
+			size--;
+			break;
+		}
+	}
+
+	*plaintext_size = size;
+	*plaintext = result;
+
+	free(round_key);
+
+	return 0;
 }
