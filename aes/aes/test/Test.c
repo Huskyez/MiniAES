@@ -1,6 +1,9 @@
 #include <assert.h> 
 #include "aes_test.h"
 
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
 
 void CipherTest128bitApendixB()
 {
@@ -27,7 +30,7 @@ void CipherTest128bitApendixB()
 	{
 		assert(output[i] == result[i]);
 	}
-
+	free(round_key);
 	free(result);
 }
 
@@ -56,7 +59,7 @@ void DecipherTest128bit()
 	{
 		assert(output[i] == result[i]);
 	}
-
+	free(round_key);
 	free(result);
 }
 
@@ -85,7 +88,7 @@ void CipherTest128bit()
 	{
 		assert(output[i] == result[i]);
 	}
-
+	free(round_key);
 	free(result);
 }
 
@@ -140,6 +143,7 @@ void ECB_AES128_Test()
 		assert(ciphertext[i] == encryption[i]);
 	}
 
+	
 
 	// test decryption
 	size_t decryption_size;
@@ -154,6 +158,8 @@ void ECB_AES128_Test()
 	{
 		assert(plaintext[i] == decryption[i]);
 	}
+	free(encryption);
+	free(decryption);
 }
 
 void ECB_AES192_Test()
@@ -205,6 +211,8 @@ void ECB_AES192_Test()
 	{
 		assert(plaintext[i] == decryption[i]);
 	}
+	free(encryption);
+	free(decryption);
 }
 
 void ECB_AES256_Test()
@@ -257,6 +265,8 @@ void ECB_AES256_Test()
 	{
 		assert(plaintext[i] == decryption[i]);
 	}
+	free(encryption);
+	free(decryption);
 }
 
 void KeyExpansionTest128bit()
@@ -448,6 +458,9 @@ int main(int argc, char** argv)
 	DecipherTest128bit();
 
 	ECB_AES128_Test();
+	
+	_CrtDumpMemoryLeaks();
+
 
 	// --------------- 192 bit tests -----------------------------------------------
 
@@ -464,4 +477,8 @@ int main(int argc, char** argv)
 	KeyExpansionTest256bit();
 
 	ECB_AES256_Test();
+
+	_CrtDumpMemoryLeaks();
+
+
 }

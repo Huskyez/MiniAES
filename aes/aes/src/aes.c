@@ -29,7 +29,7 @@ static uint8_t Nr = 10;
 static uint8_t state[4][4];
 // static WORD* round_key;
 
-static uint32_t error;
+static AES_ERR error;
 
 
 const uint8_t Rcon[11] = {
@@ -79,8 +79,10 @@ const uint8_t inv_s_box[256] = {
 
 
 
-
+// -----------------------------------------------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------- PRIVATE FUNCTIONS -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 
 inline uint8_t getSBoxValue(const uint8_t value)
@@ -158,7 +160,7 @@ void KeyExpansion(const uint8_t* key, WORD** w)
 {
 	if (w == NULL)
 	{
-		// TODO: handle error
+		error = AES_WRONG_ARGS;
 		return;
 	}
 
@@ -168,7 +170,7 @@ void KeyExpansion(const uint8_t* key, WORD** w)
 
 	if (round_key == NULL)
 	{
-		//TODO: handle no memory
+		error = AES_NO_MEMORY;
 		return;
 	}
 
@@ -408,7 +410,7 @@ void InvCipher(const uint8_t* in, const WORD* round_key, uint8_t** out)
 
 	if (result == NULL)
 	{
-		//TODO: handle no memory
+		error = AES_NO_MEMORY;
 		return;
 	}
 
@@ -434,8 +436,10 @@ void InvCipher(const uint8_t* in, const WORD* round_key, uint8_t** out)
 }
 
 
-
+// -----------------------------------------------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------- PUBLIC API FUNCTIONS --------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 void setAESType(AESTYPE type)
 {
@@ -463,13 +467,15 @@ AESTYPE getAESType()
 }
 
 
-int ecb_aes_encrypt(const uint8_t* plaintext, size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size)
+// ---------------------------------------------- ECB -------------------------------------------------------------------------------------------------
+
+AES_ERR ecb_aes_encrypt(const uint8_t* plaintext, const size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size)
 {
 
 	if (ciphertext_size == NULL || ciphertext == NULL)
 	{
-		// TODO: handle error
-		return -1;
+		error = AES_WRONG_ARGS;
+		return AES_WRONG_ARGS;
 	}
 
 	uint8_t i;
@@ -489,8 +495,8 @@ int ecb_aes_encrypt(const uint8_t* plaintext, size_t plaintext_size, const uint8
 	uint8_t* padded_plaintext = (uint8_t *) malloc((padding_size + plaintext_size) * sizeof(uint8_t));
 	if (padded_plaintext == NULL)
 	{
-		// TODO: handle error
-		return -1;
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;
 	}
 
 	memcpy(padded_plaintext, plaintext, plaintext_size);
@@ -506,8 +512,9 @@ int ecb_aes_encrypt(const uint8_t* plaintext, size_t plaintext_size, const uint8
 	uint8_t* cipher = (uint8_t *)malloc(*ciphertext_size * sizeof(uint8_t));
 	if (cipher == NULL) 
 	{
-		// TODO: handle error
-		return -1;
+		free(padded_plaintext);
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;
 	}
 
 	WORD *round_key;
@@ -525,18 +532,19 @@ int ecb_aes_encrypt(const uint8_t* plaintext, size_t plaintext_size, const uint8
 	*ciphertext = cipher;
 	
 	free(round_key);
+	free(padded_plaintext);
 
-	return 0;
+	return AES_OK;
 }
 
 
-int ecb_aes_decrypt(const uint8_t* ciphertext, size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size)
+AES_ERR ecb_aes_decrypt(const uint8_t* ciphertext, const size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size)
 {
 
 	if (plaintext == NULL || plaintext_size == NULL)
 	{
-		// TODO: handle error
-		return -1;
+		error = AES_WRONG_ARGS;
+		return AES_WRONG_ARGS;
 	}
 
 	uint8_t i;
@@ -545,15 +553,15 @@ int ecb_aes_decrypt(const uint8_t* ciphertext, size_t ciphertext_size, const uin
 
 	if (ciphertext_size % (Nb * 4) != 0)
 	{
-		// TODO: handle error
-		return -1;
+		error = AES_WRONG_CIPHERTEXT;
+		return AES_WRONG_CIPHERTEXT;
 	}
 
 	uint8_t *result = (uint8_t *)malloc(ciphertext_size * sizeof(uint8_t));
 	if (result == NULL)
 	{
-		// TODO: handle error
-		return -1;
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;
 	}	
 
 
@@ -565,11 +573,10 @@ int ecb_aes_decrypt(const uint8_t* ciphertext, size_t ciphertext_size, const uin
 
 	for (i = 0; i < blocks; i++)
 	{
-		InvCipher(ciphertext + (i * Nb * 4), round_key, &plaintext_block, Nb * 4);
+		InvCipher(ciphertext + (i * Nb * 4), round_key, &plaintext_block);
 		memcpy(result + (i * Nb * 4), plaintext_block, Nb * 4);
 		free(plaintext_block);
 	}
-
 
 	size_t size = ciphertext_size;
 
@@ -586,11 +593,119 @@ int ecb_aes_decrypt(const uint8_t* ciphertext, size_t ciphertext_size, const uin
 			break;
 		}
 	}
+	
+	uint8_t *unpadded_result = (uint8_t *)malloc(size * sizeof(uint8_t));
+	if (unpadded_result == NULL)
+	{
+		free(result);
+		free(round_key);
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;
+	}
+	memcpy(unpadded_result, result, size);
+
 
 	*plaintext_size = size;
-	*plaintext = result;
+	*plaintext = unpadded_result;
 
+	free(result);
 	free(round_key);
 
-	return 0;
+	return AES_OK;
 }
+
+
+// ---------------------------------------------- CBC -------------------------------------------------------------------------------------------------
+
+AES_ERR cbc_aes_encrypt(const uint8_t* plaintext, const size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size, const uint8_t* iv)
+{
+	if (ciphertext_size == NULL || ciphertext == NULL)
+	{
+		error = AES_WRONG_ARGS;
+		return AES_WRONG_ARGS;
+	}
+
+	uint8_t i;
+	uint8_t j;
+
+	// number of blocks in the plaintext
+	size_t blocks = plaintext_size / (Nb * 4);
+
+	//remaining number of bytes in the last block
+	size_t rest = plaintext_size % (Nb * 4);
+
+
+	// if rest is 0, i.e. length of plaintext is a multiple of Nb * 4
+	// we still add padding so we don't have to verify later if padding was
+	// added or not
+	size_t padding_size = Nb * 4 - rest;
+
+	//add padding
+	uint8_t* padded_plaintext = (uint8_t *) malloc((padding_size + plaintext_size) * sizeof(uint8_t));
+	if (padded_plaintext == NULL)
+	{
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;
+	}
+
+	memcpy(padded_plaintext, plaintext, plaintext_size);
+
+	padded_plaintext[plaintext_size] = 0x80;
+	for (i = plaintext_size + 1; i < plaintext_size + padding_size; i++)
+	{
+		padded_plaintext[i] = 0x00;		
+	}
+
+	*ciphertext_size = plaintext_size + padding_size;
+
+	uint8_t* cipher = (uint8_t *)malloc(*ciphertext_size * sizeof(uint8_t));
+	if (cipher == NULL) 
+	{
+		free(padded_plaintext);
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;
+	}
+
+
+	// current_block is the block to be encrypted that was already xored
+	uint8_t* current_block = (uint8_t*)malloc(Nb * 4 * sizeof(uint8_t));
+	if (current_block == NULL)
+	{
+		free(padded_plaintext);
+		free(cipher);
+		error = AES_NO_MEMORY;
+		return AES_NO_MEMORY;	
+	}
+	for (j = 0; j < Nb * 4; j++) 
+	{
+		current_block = padded_plaintext[j] ^ iv[j];
+	}
+
+	uint8_t *current_cipher_block;
+
+	WORD *round_key;
+	KeyExpansion(key, &round_key);
+
+	// cipher for the first block
+	Cipher(current_block, round_key, &current_cipher_block);
+	memcpy(cipher + (i * Nb * 4), current_cipher_block, Nb * 4);
+
+	for (i = 1; i < blocks + 1; i++)
+	{
+		// change the block to be encrypted
+		for (j = 0; j < Nb * 4; j++)
+		{
+			current_block[j] = current_cipher_block[j] ^ padded_plaintext[i * Nb * 4 + j];		
+		}
+		free(current_cipher_block);
+		Cipher(current_block, round_key, &current_cipher_block);
+		memcpy(cipher + (i * Nb * 4), current_cipher_block, Nb * 4);
+	}
+
+	
+	free(current_block);
+	free(current_cipher_block);
+	free(round_key);
+}
+
+

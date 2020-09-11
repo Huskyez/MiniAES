@@ -8,7 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "aes_error.h"
+
 #define Nb 4
+
+#define BLOCK_SIZE (Nb * 4)
+
+// Note: AES_ERR is a redefinition of an unsigned 32 bit integer
+// almost all functions return this
+#define AES_ERR uint32_t
 
 // define a word as a 32 bit value
 // (array of 4 bytes)
@@ -36,11 +44,11 @@ AESTYPE getAESType();
 // result is returned in ciphertext (which will be longer than the plaintext because of padding)
 // length of the resulting ciphertext is returned in ciphertext_size (number of bytes)
 // Note: setAESType function must be called before calling this one in order to set the key length - 128 bits by default
-int ecb_aes_encrypt(const uint8_t* plaintext, size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size);
+AES_ERR ecb_aes_encrypt(const uint8_t* plaintext, const size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size);
 
 // decrypt the given ciphertext using the Electronic Codebook method
 // the length of the ciphertext must be a multiple of 32
 // length of key must be of the specified length (128 / 192 / 256 bits specified with the setAESType function)
 // result is returned in plaintext (without the padding)
 // length of the plaintext is returned in plaintext_size (number of bytes)
-int ecb_aes_decrypt(const uint8_t* ciphertext, size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size);
+AES_ERR ecb_aes_decrypt(const uint8_t* ciphertext, const size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size);

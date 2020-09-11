@@ -29,5 +29,8 @@
     <ClInclude Include="src\aes_test.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\aes_error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
