@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "aes_error.h"
 
@@ -44,11 +45,17 @@ AESTYPE getAESType();
 // result is returned in ciphertext (which will be longer than the plaintext because of padding)
 // length of the resulting ciphertext is returned in ciphertext_size (number of bytes)
 // Note: setAESType function must be called before calling this one in order to set the key length - 128 bits by default
-AES_ERR ecb_aes_encrypt(const uint8_t* plaintext, const size_t plaintext_size, const uint8_t* key, uint8_t** ciphertext, size_t* ciphertext_size);
+AES_ERR ecb_aes_encrypt(const uint8_t *plaintext, const size_t plaintext_size, const uint8_t *key, uint8_t **ciphertext, size_t *ciphertext_size);
 
 // decrypt the given ciphertext using the Electronic Codebook method
 // the length of the ciphertext must be a multiple of 32
 // length of key must be of the specified length (128 / 192 / 256 bits specified with the setAESType function)
 // result is returned in plaintext (without the padding)
 // length of the plaintext is returned in plaintext_size (number of bytes)
-AES_ERR ecb_aes_decrypt(const uint8_t* ciphertext, const size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size);
+AES_ERR ecb_aes_decrypt(const uint8_t *ciphertext, const size_t ciphertext_size, const uint8_t *key, uint8_t **plaintext, size_t *plaintext_size);
+
+
+AES_ERR cbc_aes_encrypt(const uint8_t *plaintext, const size_t plaintext_size, const uint8_t *key, uint8_t **ciphertext, size_t *ciphertext_size, const uint8_t *iv);
+
+AES_ERR cbc_aes_decrypt(const uint8_t* ciphertext, const size_t ciphertext_size, const uint8_t* key, uint8_t** plaintext, size_t* plaintext_size, const uint8_t* iv);
+
